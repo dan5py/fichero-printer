@@ -10,10 +10,12 @@ from PIL import Image
 from fichero.imaging import image_to_raster, prepare_image, text_to_image
 from fichero.printer import (
     BYTES_PER_ROW,
+    CONTINUOUS_FEED_DOTS,
     DELAY_AFTER_DENSITY,
     DELAY_AFTER_FEED,
     DELAY_COMMAND_GAP,
     DELAY_RASTER_SETTLE,
+    PAPER_CONTINUOUS,
     PAPER_GAP,
     PrinterClient,
     PrinterError,
@@ -73,7 +75,10 @@ async def do_print(
         await pc.send_chunked(header + raster)
 
         await asyncio.sleep(DELAY_RASTER_SETTLE)
-        await pc.form_feed()
+        if paper == PAPER_CONTINUOUS:
+            await pc.feed_dots(CONTINUOUS_FEED_DOTS)
+        else:
+            await pc.form_feed()
         await asyncio.sleep(DELAY_AFTER_FEED)
 
         ok = await pc.stop_print()
@@ -103,6 +108,20 @@ async def cmd_status(args: argparse.Namespace) -> None:
         print(f"  printing={status.printing} cover_open={status.cover_open} "
               f"no_paper={status.no_paper} low_battery={status.low_battery} "
               f"overheated={status.overheated} charging={status.charging}")
+
+
+async def cmd_calibrate(args: argparse.Namespace) -> None:
+    """Recover a printer that ignores label gaps and keeps feeding blank labels."""
+    async with connect(args.address, classic=args.classic, channel=args.channel) as pc:
+        ok = await pc.set_paper_type(PAPER_GAP)
+        print(f"  Set paper=gap: {'OK' if ok else 'FAILED'}")
+        await asyncio.sleep(DELAY_AFTER_DENSITY)
+        r = await pc.calibrate_gap()
+        print(f"  Calibrate gap sensor: {r.hex(' ') if r else 'no reply'}")
+        await asyncio.sleep(0.5)
+        status = await pc.get_status()
+        print(f"  Status: {status}")
+        print("  Turn the printer off and on again before printing.")
 
 
 async def cmd_text(args: argparse.Namespace) -> None:
@@ -200,6 +219,10 @@ def main() -> None:
 
     p_status = sub.add_parser("status", help="Show detailed status")
     p_status.set_defaults(func=cmd_status)
+
+    p_calibrate = sub.add_parser(
+        "calibrate", help="Set gap/label mode and recalibrate the gap sensor")
+    p_calibrate.set_defaults(func=cmd_calibrate)
 
     p_text = sub.add_parser("text", help="Print text label")
     p_text.add_argument("text", nargs="+", help="Text to print")

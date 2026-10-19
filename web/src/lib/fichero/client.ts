@@ -5,10 +5,13 @@ import {
   CHUNK_SIZE,
   CHUNK_DELAY_MS,
   CMD,
+  DENSITY_MAX,
+  DENSITY_MIN,
 } from "./constants";
 import { TypedEventEmitter } from "./emitter";
 import { Utils } from "./utils";
 import { FicheroPrintTask } from "./print_task";
+import { LabelType } from "./types";
 import type {
   ConnectionInfo,
   HeartbeatData,
@@ -18,7 +21,6 @@ import type {
   FirmwareProgressEvent,
   RfidInfo,
   Packet,
-  LabelType,
   PrintTaskName,
 } from "./types";
 
@@ -80,6 +82,20 @@ export class FicheroClient extends TypedEventEmitter<ClientEventMap> {
 
     printerReset: async () => {
       await this.sendCommand(CMD.factoryReset, true);
+    },
+
+    /**
+     * Recover a printer that ignores label gaps and keeps feeding blank labels:
+     * force gap/label paper mode and re-learn the gap sensor threshold.
+     * Power cycle the printer afterwards. Returns the printer status byte.
+     */
+    recalibrateGapSensor: async (): Promise<number | undefined> => {
+      await this.sendCommand(CMD.setPaperType(0), true);
+      await Utils.sleep(100);
+      await this.sendCommand(CMD.calibrateGap, true, 10000);
+      await Utils.sleep(500);
+      const r = await this.sendCommand(CMD.getStatus, true);
+      return r.length > 0 ? r[r.length - 1] : undefined;
     },
 
     rfidInfo: async (): Promise<RfidInfo> => {
@@ -257,10 +273,10 @@ export class FicheroClient extends TypedEventEmitter<ClientEventMap> {
       model: this.info.modelId ?? "D11s",
       printheadPixels: 96,
       printDirection: "left" as const,
-      densityMin: 0,
-      densityMax: 2,
-      densityDefault: 2,
-      paperTypes: [1, 2, 3], // LabelType values
+      densityMin: DENSITY_MIN,
+      densityMax: DENSITY_MAX,
+      densityDefault: DENSITY_MAX,
+      paperTypes: [LabelType.WithGaps, LabelType.Continuous],
     };
   }
 

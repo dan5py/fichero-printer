@@ -44,6 +44,8 @@ PAPER_GAP = 0x00
 PAPER_BLACK_MARK = 0x01
 PAPER_CONTINUOUS = 0x02
 
+CONTINUOUS_FEED_DOTS = 80  # 10 mm, form feed would spool out blank paper seeking a gap
+
 # --- Timing (seconds) - empirically tuned against D11s fw 2.4.6 ---
 
 DELAY_AFTER_DENSITY = 0.10   # printer needs time to apply density setting
@@ -337,6 +339,13 @@ class PrinterClient:
     async def form_feed(self) -> None:
         """Position to next label."""
         await self.send(bytes([0x1D, 0x0C]))
+
+    async def calibrate_gap(self) -> bytes:
+        """Learn label gap: 10 FF 03. Feeds a label or two to recalibrate the gap sensor."""
+        try:
+            return await self.send(bytes([0x10, 0xFF, 0x03]), wait=True, timeout=10.0)
+        except PrinterTimeout:
+            return b""
 
     async def stop_print(self) -> bool:
         """AiYin stop: 10 FF FE 45. Waits for 0xAA or 'OK'."""

@@ -61,7 +61,27 @@
   };
 
   const reset = async () => {
+    if (!confirm("Factory reset the printer? This erases its stored settings.")) {
+      return;
+    }
     await $printerClient.abstraction.printerReset();
+  };
+
+  const recalibrateGapSensor = async () => {
+    if (!confirm("Load a label roll and close the cover. The printer will feed a label or two. Continue?")) {
+      return;
+    }
+
+    $printerClient.stopHeartbeat();
+    try {
+      const status = await $printerClient.abstraction.recalibrateGapSensor();
+      const statusHex = status === undefined ? "no reply" : `0x${status.toString(16).padStart(2, "0")}`;
+      Toasts.message(`Gap sensor recalibrated (status ${statusHex}). Turn the printer off and on again.`);
+    } catch (e) {
+      Toasts.error(e);
+    } finally {
+      $printerClient.startHeartbeat();
+    }
   };
 
   const batteryIcon = (value: number): MaterialIcon => {
@@ -179,6 +199,14 @@
         </div>
       {/if}
 
+      <button
+        class="btn btn-sm btn-outline-secondary d-block w-100 mt-1"
+        type="button"
+        title="Use if the printer ignores label gaps and keeps feeding blank labels"
+        onclick={recalibrateGapSensor}>
+        Recalibrate gap sensor
+      </button>
+
       <FirmwareUpdater />
 
       <button
@@ -196,7 +224,7 @@
           <button class="btn btn-sm btn-primary" onclick={soundOn}>Sound on</button>
           <button class="btn btn-sm btn-primary" onclick={soundOff}>Sound off</button>
           <button class="btn btn-sm btn-primary" onclick={fetchInfo}>Fetch info again</button>
-          <button class="btn btn-sm btn-primary" onclick={reset}>Reset</button>
+          <button class="btn btn-sm btn-primary" onclick={reset}>Factory reset</button>
         </div>
       </div>
     </div>

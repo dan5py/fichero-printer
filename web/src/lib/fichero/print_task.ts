@@ -1,6 +1,6 @@
-import { BYTES_PER_ROW, CHUNK_DELAY_MS, CHUNK_SIZE, CMD } from "./constants";
+import { BYTES_PER_ROW, CMD, CONTINUOUS_FEED_DOTS, DENSITY_MAX, DENSITY_MIN } from "./constants";
 import { Utils } from "./utils";
-import type { EncodedImage, LabelType, PrintProgressEvent } from "./types";
+import { LabelType, type EncodedImage, type PrintProgressEvent } from "./types";
 
 export interface PrintTaskOptions {
   totalPages: number;
@@ -51,14 +51,17 @@ export class FicheroPrintTask extends AbstractPrintTask {
       if (sb & 0x50) throw new Error("Printer overheated");
     }
 
-    // Set density
-    await this.sendCmd(CMD.setDensity(this.opts.density), true);
+    // Set density (printer only accepts 0-2)
+    const density = Math.min(DENSITY_MAX, Math.max(DENSITY_MIN, Math.round(this.opts.density)));
+    await this.sendCmd(CMD.setDensity(density), true);
     await Utils.sleep(100);
   }
 
   async printPage(image: EncodedImage, quantity: number): Promise<void> {
-    const paperTypeMap: Record<number, number> = { 1: 0, 2: 1, 3: 2 };
-    const paperByte = paperTypeMap[this.opts.labelType] ?? 0;
+    // Paper type is persisted by the printer. Black mark mode (1) is never sent:
+    // D11s rolls have no marks, so the printer would feed blank labels looking for one.
+    const continuous = this.opts.labelType === LabelType.Continuous;
+    const paperByte = continuous ? 2 : 0;
 
     for (let copy = 0; copy < quantity; copy++) {
       // Paper type
@@ -85,8 +88,8 @@ export class FicheroPrintTask extends AbstractPrintTask {
       await this.sendChunked(payload);
       await Utils.sleep(500);
 
-      // Form feed
-      await this.sendCmd(Array.from(CMD.formFeed));
+      // Form feed seeks the next gap, on continuous paper it would spool out blank paper
+      await this.sendCmd(continuous ? CMD.feedDots(CONTINUOUS_FEED_DOTS) : Array.from(CMD.formFeed));
       await Utils.sleep(300);
 
       this.emitProgress({

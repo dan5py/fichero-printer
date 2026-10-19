@@ -39,7 +39,7 @@
   let previewCanvas: HTMLCanvasElement;
   let printState = $state<"idle" | "sending" | "printing">("idle");
   let printProgress = $state<number>(0); // todo: more progress data
-  let density = $state<number>($printerMeta?.densityDefault ?? 3);
+  let density = $state<number>($printerMeta?.densityDefault ?? 2);
   let speed = $state<0 | 1>(1);
   let quantity = $state<number>(1);
   let postProcessType = $state<PostProcessType>();
@@ -251,7 +251,10 @@
       if (saved.quantity !== undefined) quantity = saved.quantity;
       if (saved.density !== undefined) density = saved.density;
       if (saved.speed !== undefined) speed = saved.speed;
-      if (saved.labelType !== undefined) labelType = saved.labelType;
+      // Old saved values may hold a paper type the printer must not be switched to
+      if (saved.labelType !== undefined && ($printerMeta?.paperTypes.includes(saved.labelType) ?? true)) {
+        labelType = saved.labelType;
+      }
       if (saved.printTaskName !== undefined) printTaskName = saved.printTaskName;
       if (saved.offset !== undefined) offset = saved.offset;
     } catch (e) {
@@ -478,8 +481,8 @@
       <input
         class="form-control"
         type="number"
-        min={$printerMeta?.densityMin ?? 1}
-        max={$printerMeta?.densityMax ?? 20}
+        min={$printerMeta?.densityMin ?? 0}
+        max={$printerMeta?.densityMax ?? 2}
         bind:value={density}
         onchange={() => updateSavedProp("density", density)} />
       <ParamLockButton propName="density" value={density} savedValue={savedProps.density} onClick={toggleSavedProp} />
@@ -500,13 +503,8 @@
     <div class="input-group input-group-sm">
       <span class="input-group-text">{$tr("preview.label_type")}</span>
       <select class="form-select" bind:value={labelType} onchange={() => updateSavedProp("labelType", labelType)}>
-        {#each Object.values(LabelType) as lt (lt)}
-          {#if typeof lt !== "string"}
-            <option value={lt}>
-              {#if $printerMeta?.paperTypes.includes(lt)}✔{/if}
-              {$tr(labelTypeTranslationKey(LabelType[lt]))}
-            </option>
-          {/if}
+        {#each $printerMeta?.paperTypes ?? [LabelType.WithGaps] as lt (lt)}
+          <option value={lt}>{$tr(labelTypeTranslationKey(LabelType[lt]))}</option>
         {/each}
       </select>
 
